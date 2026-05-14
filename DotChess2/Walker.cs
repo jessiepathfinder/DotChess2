@@ -1942,7 +1942,7 @@ namespace DotChess2
 					bs.ReadRawUnsafe(tindex);
 			}
 
-			uint score = (0x5443210u >> (int)((target & 7u) << 2)) &7;
+			uint score = (0x9553310u >> (int)((target & 7u) << 2)) &15;
 
 			
 
