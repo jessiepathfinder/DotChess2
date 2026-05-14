@@ -1842,10 +1842,33 @@ namespace DotChess2
 			// Full symmetry reduction allowed
 			// =====================================
 
-			
-			
 
-			for (ulong x = 0; x < 64; ++x)
+
+			for (ulong x = 0; x < 24; ++x)
+			{
+				ulong p = bullshit.ReadRawUnsafe(x);
+				if ((p == 1) | (p == 9))
+				{
+					return GetIdentity5(bullshit);
+				}
+			}
+			for (ulong x = 24; x < 32; ++x)
+			{
+				ulong p = bullshit.ReadRawUnsafe(x);
+				if ((p == 1) | (p == 9) | (p == 5))
+				{
+					return GetIdentity5(bullshit);
+				}
+			}
+			for (ulong x = 32; x < 40; ++x)
+			{
+				ulong p = bullshit.ReadRawUnsafe(x);
+				if ((p == 1) | (p == 9) | (p == 13))
+				{
+					return GetIdentity5(bullshit);
+				}
+			}
+			for (ulong x = 40; x < 64; ++x)
 			{
 				ulong p = bullshit.ReadRawUnsafe(x);
 				if ((p == 1) | (p == 9))
