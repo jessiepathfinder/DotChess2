@@ -40,7 +40,7 @@ namespace DotChess2.PVP
 				Console.WriteLine();
 
 				Console.Write(
-					renderer.Render());
+					renderer.Render(true));
 
 				ConsoleKeyInfo key =
 					Console.ReadKey(true);

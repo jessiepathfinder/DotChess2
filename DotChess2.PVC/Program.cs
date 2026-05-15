@@ -8,7 +8,106 @@ namespace DotChess2.PVC
 		// Placeholder engine
 		// Replace with actual implementation later
 		private static readonly TruncatedMinimaxChessEngine? engine = new TruncatedMinimaxChessEngine();
+		private static void Main1()
+		{
+			Console.CursorVisible = false;
 
+			SimpleRenderer renderer =
+				new SimpleRenderer(
+					new BoardState(BoardStateNoEnPassant.Initial()));
+
+			ISimpleChessEngine whiteEngine =
+				new TruncatedMinimaxChessEngine();
+
+			ISimpleChessEngine blackEngine =
+				new TruncatedMinimaxChessEngine();
+
+			while (true)
+			{
+				Console.Clear();
+
+				Console.Write(
+					renderer.Render(false));
+
+				Console.WriteLine(
+					renderer.IsBlackTurn
+						? "Black to move"
+						: "White to move");
+
+				Console.WriteLine(
+					"Press ENTER for next engine move.");
+				Console.WriteLine(
+					"Press ESC to quit.");
+
+				ConsoleKeyInfo key =
+					Console.ReadKey(true);
+
+				if (key.Key == ConsoleKey.Escape)
+				{
+					return;
+				}
+
+				if (key.Key != ConsoleKey.Enter)
+				{
+					continue;
+				}
+
+				Conclusion conclusion =
+					renderer.GetConclusion();
+
+				if (conclusion != Conclusion.NORMAL)
+				{
+					continue;
+				}
+
+				bool blackToMove =
+					renderer.IsBlackTurn;
+
+				Span<Coordinate> origins =
+					stackalloc Coordinate[218];
+
+				Span<Coordinate> destinations =
+					stackalloc Coordinate[218];
+
+				int moveCount =
+					Walker.GetAllLegalMovesUnsafe(
+						renderer.BoardState,
+						origins,
+						destinations,
+						blackToMove);
+
+				if (moveCount <= 0)
+				{
+					continue;
+				}
+
+				Span<Move> permittedMoves =
+					stackalloc Move[moveCount];
+
+				for (int i = 0; i < moveCount; ++i)
+				{
+					permittedMoves[i] =
+						new Move(
+							origins[i],
+							destinations[i]);
+				}
+
+				ISimpleChessEngine engine =
+					blackToMove
+						? blackEngine
+						: whiteEngine;
+
+				Move move =
+					engine.ComputeMove(
+						renderer.BoardState,
+						permittedMoves,
+						blackToMove);
+
+				renderer.ApplyMoveUnsafe(move);
+
+				renderer.InvertTurn();
+			}
+		}
 		public static void Main()
 		{
 			Console.CursorVisible = false;
@@ -23,7 +122,7 @@ namespace DotChess2.PVC
 				Console.Clear();
 
 				Console.Write(
-					renderer.Render());
+					renderer.Render(true));
 
 				Console.WriteLine();
 				Console.WriteLine(

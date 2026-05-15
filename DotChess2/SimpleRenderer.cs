@@ -120,7 +120,7 @@ namespace DotChess2
 				: Conclusion.STALEMATE;
 		}
 
-		public string Render()
+		public string Render(bool enable_cursor)
 		{
 			Span<char> span = stackalloc char[72];
 
@@ -144,7 +144,7 @@ namespace DotChess2
 			Conclusion conclusion =
 				GetConclusion();
 
-			if (conclusion == Conclusion.NORMAL)
+			if (conclusion == Conclusion.NORMAL & enable_cursor)
 			{
 				if (destinationSelectMode)
 				{

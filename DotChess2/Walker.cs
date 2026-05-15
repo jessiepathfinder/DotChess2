@@ -1785,10 +1785,10 @@ namespace DotChess2
 			}
 		}
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private static (
+		public static (
 			BoardStateNoEnPassant identity,
 			int color_flip)
-		GetIdentity5(BoardStateNoEnPassant bullshit)
+		GetIdentityAssumePawn(BoardStateNoEnPassant bullshit)
 		{
 
 			(bullshit, int fli) = GetIdentity4(bullshit);
@@ -1849,7 +1849,7 @@ namespace DotChess2
 				ulong p = bullshit.ReadRawUnsafe(x);
 				if ((p == 1) | (p == 9))
 				{
-					return GetIdentity5(bullshit);
+					return GetIdentityAssumePawn(bullshit);
 				}
 			}
 			for (ulong x = 24; x < 32; ++x)
@@ -1857,7 +1857,7 @@ namespace DotChess2
 				ulong p = bullshit.ReadRawUnsafe(x);
 				if ((p == 1) | (p == 9) | (p == 5))
 				{
-					return GetIdentity5(bullshit);
+					return GetIdentityAssumePawn(bullshit);
 				}
 			}
 			for (ulong x = 32; x < 40; ++x)
@@ -1865,7 +1865,7 @@ namespace DotChess2
 				ulong p = bullshit.ReadRawUnsafe(x);
 				if ((p == 1) | (p == 9) | (p == 13))
 				{
-					return GetIdentity5(bullshit);
+					return GetIdentityAssumePawn(bullshit);
 				}
 			}
 			for (ulong x = 40; x < 64; ++x)
@@ -1873,7 +1873,7 @@ namespace DotChess2
 				ulong p = bullshit.ReadRawUnsafe(x);
 				if ((p == 1) | (p == 9))
 				{
-					return GetIdentity5(bullshit);
+					return GetIdentityAssumePawn(bullshit);
 				}
 			}
 			(BoardStateNoEnPassant best, int bestFlip) = GetIdentity3(bullshit);
@@ -1885,14 +1885,72 @@ namespace DotChess2
 			return (best, bestFlip);
 		}
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static (
+	BoardStateNoEnPassant identity,
+	int color_flip)
+GetIdentityAssumeNoEP(BoardStateNoEnPassant bullshit)
+		{
+			// =====================================
+			// If castleability metadata exists,
+			// horizontal symmetry is unsafe because
+			// queenside/kingside semantics differ.
+			//
+			// Allowed:
+			// - identity
+			// - vertical flip + color inversion
+			// =====================================
+
+			if (
+				(bullshit.ReadRawUnsafe(0ul) == 5) |
+				(bullshit.ReadRawUnsafe(7ul) == 5) |
+				(bullshit.ReadRawUnsafe(56ul) == 13) |
+				(bullshit.ReadRawUnsafe(63ul) == 13)
+			)
+			{
+				BoardStateNoEnPassant newboard =
+					VerticalFlipUnsafe(bullshit)
+					.FlipColorUnsafe();
+
+				if (InvarCompare(bullshit, newboard) > 0)
+				{
+					return (newboard, -1);
+				}
+
+				return (bullshit, 1);
+			}
+
+			// =====================================
+			// Full symmetry reduction allowed
+			// =====================================
+
+
+
+			for (ulong x = 0; x < 64; ++x)
+			{
+				ulong p = bullshit.ReadRawUnsafe(x);
+				if ((p == 1) | (p == 9))
+				{
+					return GetIdentityAssumePawn(bullshit);
+				}
+			}
+			
+			(BoardStateNoEnPassant best, int bestFlip) = GetIdentity3(bullshit);
+			(BoardStateNoEnPassant best1, int bestFlip1) = GetIdentity3(Rotate90Unsafe(bullshit));
+			if (InvarCompare(best1, best) < 0)
+			{
+				return (best1, bestFlip1);
+			}
+
+			return (best, bestFlip);
+		}
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static (BoardStateNoEnPassant,int) GetIdentity(BoardState boardState){
 			BoardStateNoEnPassant boardStateNoEnPassant;
 			if(HasRelevantEnPassantUnsafe(boardState)){
-				boardStateNoEnPassant = boardState.ToCompressedEPFormUnsafe();
+				return GetIdentityAssumePawn(boardState.ToCompressedEPFormUnsafe());
 			} else{
-				boardStateNoEnPassant = boardState.boardStateNoEnPassant;
+				return GetIdentityAssumeNoEP(boardState.boardStateNoEnPassant);
 			}
-			return GetIdentity(boardStateNoEnPassant);
 		}
 
 
