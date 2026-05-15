@@ -29,16 +29,31 @@ namespace DotChess2
 	}
 	public sealed class TruncatedMinimaxChessEngine : ISimpleChessEngine
 	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private static Coordinate FindKingUnsafe(BoardStateNoEnPassant bs,uint p){
+			for(ulong i = 0; true; ++i){
+				if (bs.ReadRawUnsafe(i) == p){
+					int i1 = (int)i;
+					return new Coordinate(i1 & 7, i1 >> 3);
+				}
+			}
+		}
+
 		private readonly struct EphemeralKillerSorterOld : IComparer<Move> {
 			private readonly BoardState boardState;
+			private readonly Coordinate enemyKingCoord;
+			private readonly uint eightIfBlack;
+
 			
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public EphemeralKillerSorterOld(BoardState boardState) {
+			public EphemeralKillerSorterOld(BoardState boardState, Coordinate enemyKingCoord, uint eightIfBlack) {
 				this.boardState = boardState;
+				this.enemyKingCoord = enemyKingCoord;
+				this.eightIfBlack = eightIfBlack;
 			}
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public int Compare(Move x, Move y) {
-				return Walker.GetKillerMoveScoreUnsafe(boardState, y).CompareTo(Walker.GetKillerMoveScoreUnsafe(boardState, x));
+				return Walker.GetKillerMoveScoreUnsafe2(boardState, y,enemyKingCoord,eightIfBlack).CompareTo(Walker.GetKillerMoveScoreUnsafe2(boardState, x, enemyKingCoord, eightIfBlack));
 			}
 		}
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -53,11 +68,11 @@ namespace DotChess2
 			BoardStateNoEnPassant identity;
 			uint pa = boardState.enPassantOffset;
 
-			
 
+			var nbs = boardState.boardStateNoEnPassant;
 			if (pa == 0)
 			{
-				identity = Walker.GetIdentity(boardState.boardStateNoEnPassant).identity;
+				identity = Walker.GetIdentity(nbs).identity;
 			}
 			else
 			{
@@ -75,9 +90,8 @@ namespace DotChess2
 						}
 					}
 				}
-				identity = Walker.GetIdentityAssumeNoEP(boardState.boardStateNoEnPassant).identity;
+				identity = Walker.GetIdentityAssumeNoEP(nbs).identity;
 			}
-			identity = Walker.GetIdentityAssumeNoEP(identity).identity;
 		nopi:
 			HashSet<BoardStateNoEnPassant> s = new();
 			s.Add(identity);
@@ -90,7 +104,10 @@ namespace DotChess2
 
 			Span<Move> pm1 = stackalloc Move[lim];
 			permittedMoves.CopyTo(pm1);
-			pm1.Sort(new EphemeralKillerSorterOld(boardState));
+
+			uint eightIfBlack = blackToMove ? 8u : 0u;
+
+			pm1.Sort(new EphemeralKillerSorterOld(boardState, FindKingUnsafe(nbs, 15 ^ eightIfBlack), eightIfBlack));
 
 			Span<Move> candid = stackalloc Move[lim];
 			int alpha = -65536;
@@ -244,15 +261,12 @@ namespace DotChess2
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool CheckUnlimitedDepthEligible(BoardStateNoEnPassant boardStateNoEnPassant){
-			ulong whitePieces = 0;
-			ulong blackPieces = 0;
+			uint npc = 0;
 			for(ulong i = 0; i < 64; ++i){
 				ulong x = boardStateNoEnPassant.ReadRawUnsafe(i);
 				if (x == 0) continue;
-				ulong bp = x >> 3;
-				blackPieces += bp;
-				whitePieces += 1 - bp;
-				if ((blackPieces > 3) & (whitePieces > 3)) return false;
+				if (npc > 3) return false;
+				++npc;
 			}
 			return true;
 		}
@@ -260,6 +274,7 @@ namespace DotChess2
 		private readonly struct EphemeralKillerSorter : IComparer<Move>
 		{
 			private readonly BoardState boardState;
+			
 
 			private readonly
 			Dictionary<
@@ -268,6 +283,8 @@ namespace DotChess2
 			cache;
 
 			private readonly int maxDepthRemains;
+			private readonly Coordinate enemyKingCoord;
+			private readonly uint eightIfBlack;
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public EphemeralKillerSorter(
@@ -276,12 +293,14 @@ namespace DotChess2
 					BoardStateNoEnPassant,
 					(int score, int depth)>
 				cache,
-				int maxDepthRemains)
+				int maxDepthRemains, Coordinate enemyKingCoord, uint eightIfBlack)
 			{
 				this.boardState = boardState;
 				this.cache = cache;
 				this.maxDepthRemains =
 					maxDepthRemains;
+				this.enemyKingCoord = enemyKingCoord;
+				this.eightIfBlack = eightIfBlack;
 			}
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -381,11 +400,13 @@ namespace DotChess2
 			for(int i = 0; i < shadowChessStackMoves; ++i){
 				moves[i] = new Move(a[i], b[i]);
 			}
-			if(shadowChessStackMoves > 1) moves.Sort(new EphemeralKillerSorter(boardState, cache, maxDepthRemains));
-
+			uint eightIfBlack = blackToMove ? 8u : 0u;
 			//NOTE: DON'T deduct from max depth remains if king is in check
-			uint expectedKing = blackToMove ? 15u : 7u;
 			BoardStateNoEnPassant boardStateNoEnPassant = boardState.boardStateNoEnPassant;
+			if (shadowChessStackMoves > 1) moves.Sort(new EphemeralKillerSorter(boardState, cache, maxDepthRemains, FindKingUnsafe(boardStateNoEnPassant, eightIfBlack ^ 15), eightIfBlack));
+			uint expectedKing = eightIfBlack | 7;
+
+			
 			for(ulong kindex = 0; true;++kindex){
 				if(boardStateNoEnPassant.ReadRawUnsafe(kindex) == expectedKing){
 					int iki = (int)kindex;

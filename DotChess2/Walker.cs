@@ -2055,6 +2055,18 @@ GetIdentityAssumeNoEP(BoardStateNoEnPassant bullshit)
 			return score;
 		}
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static uint GetKillerMoveScoreUnsafe2(
+		BoardState bs,
+		Move move, Coordinate ememyKingCoordinate, uint eightIfBlack){
+			uint score = GetKillerMoveScoreUnsafe(bs,move) << 2;
+			if(ChkLegalKingPositionUnsafe(bs.boardStateNoEnPassant, ememyKingCoordinate, eightIfBlack)){
+				return score;
+			}
+			return score | 1;
+
+
+		}
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		[ChatGPTGenerated]
 		public static uint GetKillerMoveScoreUnsafe(
 	BoardState bs,
