@@ -1945,7 +1945,6 @@ GetIdentityAssumeNoEP(BoardStateNoEnPassant bullshit)
 		}
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static (BoardStateNoEnPassant,int) GetIdentity(BoardState boardState){
-			BoardStateNoEnPassant boardStateNoEnPassant;
 			if(HasRelevantEnPassantUnsafe(boardState)){
 				return GetIdentityAssumePawn(boardState.ToCompressedEPFormUnsafe());
 			} else{
