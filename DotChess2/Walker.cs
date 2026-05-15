@@ -1100,6 +1100,171 @@ namespace DotChess2
 				: Conclusion.STALEMATE;
 		}
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static Conclusion GetConclusionFastUnsafe_USCFDraw(
+	BoardState boardState,
+	bool blackToMove)
+		{
+			// =========================================
+			// Fast insufficient material detection
+			// =========================================
+			//
+			// Draws detected:
+			//
+			// - K vs K
+			// - K+B vs K
+			// - K+N vs K
+			// - K+NN vs K
+			//
+			// Conservative:
+			//
+			// Does NOT detect:
+			// - same-color bishops
+			// - fortress draws
+			// - repetitions
+			// - 50 move rule
+			//
+			// =========================================
+
+			int whiteKnights = 0;
+			int blackKnights = 0;
+
+			int whiteBishops = 0;
+			int blackBishops = 0;
+
+			int whiteOther = 0;
+			int blackOther = 0;
+
+			for (ulong i = 0; i < 64; ++i)
+			{
+				uint p = boardState.ReadRawUnsafe(i);
+
+				uint type = p & 7;
+
+				if (type == 0 || type == 7)
+					continue;
+
+				bool black = (p & 8) != 0;
+
+				switch (type)
+				{
+					case 2:
+
+						if (black)
+							++blackKnights;
+						else
+							++whiteKnights;
+
+						break;
+
+					case 3:
+
+						if (black)
+							++blackBishops;
+						else
+							++whiteBishops;
+
+						break;
+
+					default:
+
+						if (black)
+							++blackOther;
+						else
+							++whiteOther;
+
+						break;
+				}
+			}
+
+			// Any pawn/rook/queen/etc means sufficient
+			if ((whiteOther | blackOther) == 0)
+			{
+				int whiteMinors =
+					whiteKnights + whiteBishops;
+
+				int blackMinors =
+					blackKnights + blackBishops;
+
+				// K vs K
+				if ((whiteMinors | blackMinors) == 0)
+				{
+					return Conclusion.TOO_WEAK;
+				}
+
+				// K+minor vs K
+				if (
+					(whiteMinors == 1 & blackMinors == 0) |
+					(whiteMinors == 0 & blackMinors == 1))
+				{
+					return Conclusion.TOO_WEAK;
+				}
+
+				// K+NN vs K
+				if (
+					whiteKnights == 2 &
+					whiteBishops == 0 &
+					blackMinors == 0)
+				{
+					return Conclusion.TOO_WEAK;
+				}
+
+				if (
+					blackKnights == 2 &
+					blackBishops == 0 &
+					whiteMinors == 0)
+				{
+					return Conclusion.TOO_WEAK;
+				}
+			}
+
+			// =========================================
+			// Find side-to-move king
+			// =========================================
+
+			uint king = 7u | (blackToMove ? 8u : 0u);
+
+			uint kingcoord = 0;
+
+			while (
+				boardState.ReadRawUnsafe(
+					kingcoord) != king)
+			{
+				++kingcoord;
+			}
+
+			Coordinate kingCoord =
+				new Coordinate(
+					(int)(kingcoord & 7),
+					(int)(kingcoord >> 3));
+
+			// =========================================
+			// Legal move existence
+			// =========================================
+
+			if (HasAnyLegalMoveUnsafe(
+				boardState,
+				blackToMove))
+			{
+				return Conclusion.NORMAL;
+			}
+
+			// =========================================
+			// Checkmate / stalemate
+			// =========================================
+
+			bool inCheck =
+				!ChkLegalKingPositionUnsafe(
+					boardState.boardStateNoEnPassant,
+					kingCoord,
+					blackToMove
+						? 0u
+						: 8u);
+
+			return inCheck
+				? Conclusion.CHECKMATE
+				: Conclusion.STALEMATE;
+		}
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private static ObstructionType GetObstructionType(BoardStateNoEnPassant bs, Coordinate coordinate, ulong eightifblack)
 		{
 			int cxy = coordinate.x | coordinate.y;
@@ -1109,6 +1274,194 @@ namespace DotChess2
 			ulong piece = bs.ReadRawUnsafe(((uint)coordinate.x) | (((uint)coordinate.y) << 3));
 			if (piece == 0) return ObstructionType.NO_OBSTRUCTION;
 			return ((piece & 8) == eightifblack) ? ObstructionType.FRIENDLY_OBSTRUCTION : ObstructionType.ENEMY_OBSTRUCTION;
+		}
+		[ChatGPTGenerated]
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static bool CheckInsufMaterialDrawFastUnsafe(
+	BoardStateNoEnPassant boardState)
+		{
+			// =========================================
+			// Strict insufficient material detection
+			// =========================================
+			//
+			// Detects ONLY positions where mate
+			// is impossible by any legal sequence.
+			//
+			// Draws:
+			//
+			// - K vs K
+			// - K+B vs K
+			// - K+N vs K
+			//
+			// NOT draws:
+			//
+			// - K+NN vs K
+			// - K+BB vs K
+			// - K+BN vs K
+			//
+			// Conservative and fast.
+			// =========================================
+
+			int whiteKnights = 0;
+			int blackKnights = 0;
+
+			int whiteBishops = 0;
+			int blackBishops = 0;
+
+			for (ulong i = 0; i < 64; ++i)
+			{
+				uint p = boardState.ReadRawUnsafe(i);
+
+				uint type = p & 7;
+
+				if (type == 0 | type == 7)
+					continue;
+
+				bool black = (p & 8) != 0;
+
+				switch (type)
+				{
+					case 2:
+
+						if (black)
+							++blackKnights;
+						else
+							++whiteKnights;
+
+						break;
+
+					case 3:
+
+						if (black)
+							++blackBishops;
+						else
+							++whiteBishops;
+
+						break;
+
+					default:
+
+						// Pawn / rook / queen / etc
+						return false;
+				}
+			}
+
+			int whiteMinors =
+				whiteKnights + whiteBishops;
+
+			int blackMinors =
+				blackKnights + blackBishops;
+
+			// K vs K
+			if ((whiteMinors | blackMinors) == 0)
+				return true;
+
+			// K+minor vs K
+			if (
+				(whiteMinors == 1 & blackMinors == 0) |
+				(whiteMinors == 0 & blackMinors == 1))
+			{
+				return true;
+			}
+
+			return false;
+		}
+		[ChatGPTGenerated]
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static bool CheckInsufMaterialDrawFastUnsafe_USCF(
+			BoardStateNoEnPassant boardState)
+		{
+			// =========================================
+			// USCF-style insufficient material
+			// =========================================
+			//
+			// Same as strict version PLUS:
+			//
+			// - K+NN vs K
+			//
+			// treated as automatic draw.
+			//
+			// =========================================
+
+			int whiteKnights = 0;
+			int blackKnights = 0;
+
+			int whiteBishops = 0;
+			int blackBishops = 0;
+
+			for (ulong i = 0; i < 64; ++i)
+			{
+				uint p = boardState.ReadRawUnsafe(i);
+
+				uint type = p & 7;
+
+				if (type == 0 | type == 7)
+					continue;
+
+				bool black = (p & 8) != 0;
+
+				switch (type)
+				{
+					case 2:
+
+						if (black)
+							++blackKnights;
+						else
+							++whiteKnights;
+
+						break;
+
+					case 3:
+
+						if (black)
+							++blackBishops;
+						else
+							++whiteBishops;
+
+						break;
+
+					default:
+
+						return false;
+				}
+			}
+
+			int whiteMinors =
+				whiteKnights + whiteBishops;
+
+			int blackMinors =
+				blackKnights + blackBishops;
+
+			// K vs K
+			if ((whiteMinors | blackMinors) == 0)
+				return true;
+
+			// K+minor vs K
+			if (
+				(whiteMinors == 1 & blackMinors == 0) |
+				(whiteMinors == 0 & blackMinors == 1))
+			{
+				return true;
+			}
+
+			// K+NN vs K
+			if (
+				whiteKnights == 2 &
+				whiteBishops == 0 &
+				blackMinors == 0)
+			{
+				return true;
+			}
+
+			if (
+				blackKnights == 2 &
+				blackBishops == 0 &
+				whiteMinors == 0)
+			{
+				return true;
+			}
+
+			return false;
 		}
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private static int GetPawnTargets(Span<Coordinate> destinations,BoardState bs, Coordinate origin, GamePiece cached, uint u8ib)

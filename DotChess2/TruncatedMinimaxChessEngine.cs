@@ -13,14 +13,15 @@ namespace DotChess2
 	/// <summary>
 	/// A chess engine that does not enforce the triple repetition rule
 	/// </summary>
-	public interface ISimpleChessEngine{
-		public Move ComputeMove(BoardState boardState,ReadOnlySpan<Move> permittedMoves,bool blackToMove);
+	public interface ISimpleChessEngine
+	{
+		public Move ComputeMove(BoardState boardState, ReadOnlySpan<Move> permittedMoves, bool blackToMove);
 	}
 	public sealed class RandomChessEngine : ISimpleChessEngine
 	{
-		private RandomChessEngine(){ }
+		private RandomChessEngine() { }
 		public static readonly RandomChessEngine instance = new RandomChessEngine();
-		public Move ComputeMove(BoardState boardState, ReadOnlySpan<Move> permittedMoves,bool blackToMove)
+		public Move ComputeMove(BoardState boardState, ReadOnlySpan<Move> permittedMoves, bool blackToMove)
 		{
 			int len = permittedMoves.Length;
 			if (len == 1) return permittedMoves[0];
@@ -30,30 +31,36 @@ namespace DotChess2
 	public sealed class TruncatedMinimaxChessEngine : ISimpleChessEngine
 	{
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private static Coordinate FindKingUnsafe(BoardStateNoEnPassant bs,uint p){
-			for(ulong i = 0; true; ++i){
-				if (bs.ReadRawUnsafe(i) == p){
+		private static Coordinate FindKingUnsafe(BoardStateNoEnPassant bs, uint p)
+		{
+			for (ulong i = 0; true; ++i)
+			{
+				if (bs.ReadRawUnsafe(i) == p)
+				{
 					int i1 = (int)i;
 					return new Coordinate(i1 & 7, i1 >> 3);
 				}
 			}
 		}
 
-		private readonly struct EphemeralKillerSorterOld : IComparer<Move> {
+		private readonly struct EphemeralKillerSorterOld : IComparer<Move>
+		{
 			private readonly BoardState boardState;
 			private readonly Coordinate enemyKingCoord;
 			private readonly uint eightIfBlack;
 
-			
+
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public EphemeralKillerSorterOld(BoardState boardState, Coordinate enemyKingCoord, uint eightIfBlack) {
+			public EphemeralKillerSorterOld(BoardState boardState, Coordinate enemyKingCoord, uint eightIfBlack)
+			{
 				this.boardState = boardState;
 				this.enemyKingCoord = enemyKingCoord;
 				this.eightIfBlack = eightIfBlack;
 			}
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public int Compare(Move x, Move y) {
-				return Walker.GetKillerMoveScoreUnsafe2(boardState, y,enemyKingCoord,eightIfBlack).CompareTo(Walker.GetKillerMoveScoreUnsafe2(boardState, x, enemyKingCoord, eightIfBlack));
+			public int Compare(Move x, Move y)
+			{
+				return Walker.GetKillerMoveScoreUnsafe2(boardState, y, enemyKingCoord, eightIfBlack).CompareTo(Walker.GetKillerMoveScoreUnsafe2(boardState, x, enemyKingCoord, eightIfBlack));
 			}
 		}
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -61,7 +68,7 @@ namespace DotChess2
 		{
 			int lim = permittedMoves.Length;
 			if (lim == 1) return permittedMoves[0];
-			
+
 			Span<Coordinate> cs = stackalloc Coordinate[436];
 			Span<Coordinate> a = cs.Slice(0, 218);
 			Span<Coordinate> b = cs.Slice(218, 218);
@@ -108,31 +115,51 @@ namespace DotChess2
 			uint eightIfBlack = blackToMove ? 8u : 0u;
 
 			pm1.Sort(new EphemeralKillerSorterOld(boardState, FindKingUnsafe(nbs, 15 ^ eightIfBlack), eightIfBlack));
-
+			int depth;
+			if (Walker.ChkLegalKingPositionUnsafe(nbs, FindKingUnsafe(nbs, 15 | eightIfBlack), eightIfBlack ^ 8))
+			{
+				depth = 5;
+			}
+			else
+			{
+				depth = 6;
+			}
 			Span<Move> candid = stackalloc Move[lim];
+
+
+
 			int alpha = -65536;
 			int beta = 65536;
-			for (int i = 0; i < lim; ++i){
+			for (int i = 0; i < lim; ++i)
+			{
 				Move move = permittedMoves[i];
 
-				int score = AlphaBetaPruning(Walker.ApplyMoveUnsafe(boardState, move), a, b, s, cache, alpha, beta, 5, nbpm, 0);
-				if(blackToMove){
-					if(score < beta){
+				int score = AlphaBetaPruning(Walker.ApplyMoveUnsafe(boardState, move), a, b, s, cache, alpha, beta, depth, nbpm, 0);
+				if (blackToMove)
+				{
+					if (score < beta)
+					{
 						beta = score;
 					}
-				} else{
-					if(score > alpha){
+				}
+				else
+				{
+					if (score > alpha)
+					{
 						alpha = score;
 					}
 				}
 
 				score *= multi;
 
-				if(score > bestScore){
+				if (score > bestScore)
+				{
 					ndraw = 1;
 					bestScore = score;
 					candid[0] = move;
-				} else if(score == bestScore){
+				}
+				else if (score == bestScore)
+				{
 					candid[ndraw++] = move;
 				}
 				if (score == 65536) break;
@@ -141,8 +168,8 @@ namespace DotChess2
 			if (ndraw == 0) return permittedMoves[RandomNumberGenerator.GetInt32(0, lim)];
 			if (ndraw == 1) return candid[0];
 			return candid[RandomNumberGenerator.GetInt32(0, ndraw)];
-			
-			
+
+
 		}
 
 		//Branch predictor state isolation optimization
@@ -167,9 +194,11 @@ namespace DotChess2
 			return AlphaBetaPruningImpl(boardState, a, b, reached, cache, alpha, beta, maxDepthRemains, false, ndepth);
 		}
 
-		public static int GetHeuristicAdvantage(BoardStateNoEnPassant boardState){
+		public static int GetHeuristicAdvantage(BoardStateNoEnPassant boardState)
+		{
 			int adv = 0;
-			for(ulong i = 0; i < 64; ++i){
+			for (ulong i = 0; i < 64; ++i)
+			{
 				uint p = boardState.ReadRawUnsafe(i);
 				adv += ((0x09553310 >> (int)((p & 7u) << 2)) & 15) * (1 - (((int)(p >> 3)) << 1));
 			}
@@ -182,14 +211,15 @@ namespace DotChess2
 
 			if (maxDepthRemains == 0)
 			{
-				Conclusion conclusion = Walker.GetConclusionFastUnsafe(boardState, blackToMove);
+				Conclusion conclusion = Walker.GetConclusionFastUnsafe_USCFDraw(boardState, blackToMove);
 				if (conclusion == Conclusion.CHECKMATE) return blackToMove ? 65536 : -65536;
 				if (conclusion != Conclusion.NORMAL) return 0;
 				return GetHeuristicAdvantage(boardState.boardStateNoEnPassant);
 			}
-
-			int delta = Walker.GetAllLegalMovesUnsafe(boardState, a, b, blackToMove);
 			BoardStateNoEnPassant nbs = boardState.boardStateNoEnPassant;
+			
+			int delta = Walker.GetAllLegalMovesUnsafe(boardState, a, b, blackToMove);
+			
 			if (delta == 0)
 			{
 				uint expectedKing = blackToMove ? 15u : 7u;
@@ -213,6 +243,7 @@ namespace DotChess2
 			int multiply;
 			if (CheckUnlimitedDepthEligible(nbs))
 			{
+				if (Walker.CheckInsufMaterialDrawFastUnsafe_USCF(nbs)) return 0;
 				//UNLIMITED depth regime
 				maxDepthRemains = int.MaxValue;
 			}
@@ -220,7 +251,7 @@ namespace DotChess2
 
 			if (pa == 0)
 			{
-				(identity,multiply) = Walker.GetIdentityAssumeNoEP(nbs);
+				(identity, multiply) = Walker.GetIdentityAssumeNoEP(nbs);
 			}
 			else
 			{
@@ -232,7 +263,7 @@ namespace DotChess2
 						//AVOID knight underpromotion moves
 						if ((des.y != 0 & des.y != 7))
 						{
-							(identity,multiply) = Walker.GetIdentityAssumePawn(boardState.ToCompressedEPFormUnsafe());
+							(identity, multiply) = Walker.GetIdentityAssumePawn(boardState.ToCompressedEPFormUnsafe());
 							goto nopi;
 						}
 					}
@@ -240,7 +271,7 @@ namespace DotChess2
 				(identity, multiply) = Walker.GetIdentityAssumeNoEP(nbs);
 			}
 		nopi:
-			
+
 			if (cache.TryGetValue(identity, out var result))
 			{
 				if (result.depth < maxDepthRemains)
@@ -254,19 +285,24 @@ namespace DotChess2
 			int res = AlphaBetaPruningImpl3(boardState, a, b, delta, reached, cache, alpha, beta, maxDepthRemains, blackToMove, ndepth);
 			reached.Remove(identity);
 			//NOTE: Cache doesn't care about depth if we have a definite win/lose evaluation
-			cache[identity] = (res,  ((res == 65536) | (res == -65536)) ? int.MaxValue : maxDepthRemains);
+			cache[identity] = (res, ((res == 65536) | (res == -65536)) ? int.MaxValue : maxDepthRemains);
 			return res;
 		}
 
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static bool CheckUnlimitedDepthEligible(BoardStateNoEnPassant boardStateNoEnPassant){
-			uint npc = 0;
-			for(ulong i = 0; i < 64; ++i){
+		public static bool CheckUnlimitedDepthEligible(BoardStateNoEnPassant boardStateNoEnPassant)
+		{
+			ulong whitePieces = 0;
+			ulong blackPieces = 0;
+			for (ulong i = 0; i < 64; ++i)
+			{
 				ulong x = boardStateNoEnPassant.ReadRawUnsafe(i);
 				if (x == 0) continue;
-				if (npc > 3) return false;
-				++npc;
+				ulong bp = x >> 3;
+				blackPieces += bp;
+				whitePieces += 1 - bp;
+				if ((blackPieces > 3) & (whitePieces > 3)) return false;
 			}
 			return true;
 		}
@@ -274,7 +310,7 @@ namespace DotChess2
 		private readonly struct EphemeralKillerSorter : IComparer<Move>
 		{
 			private readonly BoardState boardState;
-			
+
 
 			private readonly
 			Dictionary<
@@ -307,20 +343,11 @@ namespace DotChess2
 			private uint GetCacheAwareKillerScoreUnsafe(
 				Move move)
 			{
-				uint score =
-					Walker.GetKillerMoveScoreUnsafe(
-						boardState,	move);
-
-
-
-
-
-
 				// =====================================
 				// Cache hit bonus
 				// =====================================
 
-				if (cache.TryGetValue(Walker.GetIdentity(Walker.ApplyMoveUnsafe(boardState,move)).Item1,out var result))
+				if (cache.TryGetValue(Walker.GetIdentity(Walker.ApplyMoveUnsafe(boardState, move)).Item1, out var result))
 				{
 
 					if (
@@ -331,21 +358,18 @@ namespace DotChess2
 					}
 				}
 
-
-				return score;
+				return Walker.GetKillerMoveScoreUnsafe2(boardState, move, enemyKingCoord, eightIfBlack);
 			}
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public int Compare(Move x, Move y)
 			{
-				return
-					GetCacheAwareKillerScoreUnsafe(y)
-					.CompareTo(
-					GetCacheAwareKillerScoreUnsafe(x));
+				return GetCacheAwareKillerScoreUnsafe(y).CompareTo(GetCacheAwareKillerScoreUnsafe(x));
 			}
 		}
 
-		private sealed class RecursivePruningJob{
+		private sealed class RecursivePruningJob
+		{
 			private readonly BoardState boardState;
 			private readonly Coordinate[] array;
 			private readonly int shadowChessStackMoves;
@@ -369,21 +393,23 @@ namespace DotChess2
 				this.maxDepthRemains = maxDepthRemains;
 				this.blackToMove = blackToMove;
 			}
-			public void Run() {
+			public void Run()
+			{
 				var a = array.AsSpan();
 				outcome = AlphaBetaPruningImpl3(boardState, a.Slice(0, 218), a.Slice(218, 218), shadowChessStackMoves, reached, cache, alpha, beta, maxDepthRemains, blackToMove, 0);
 			}
 		}
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private static int AlphaBetaPruningImpl3(BoardState boardState, Span<Coordinate> a, Span<Coordinate> b, int shadowChessStackMoves, HashSet<BoardStateNoEnPassant> reached, Dictionary<BoardStateNoEnPassant, (int score, int depth)> cache, int alpha, int beta, int maxDepthRemains, bool blackToMove,uint ndepth)
+		private static int AlphaBetaPruningImpl3(BoardState boardState, Span<Coordinate> a, Span<Coordinate> b, int shadowChessStackMoves, HashSet<BoardStateNoEnPassant> reached, Dictionary<BoardStateNoEnPassant, (int score, int depth)> cache, int alpha, int beta, int maxDepthRemains, bool blackToMove, uint ndepth)
 		{
-			if(ndepth == 64){
+			if (ndepth == 64)
+			{
 				//AVOID stack overflow exceptions
 				Coordinate[] clist = GC.AllocateUninitializedArray<Coordinate>(436);
 				for (int i = 0; i < shadowChessStackMoves; ++i)
 				{
 					clist[i] = a[i];
-					clist[i+218] = b[i];
+					clist[i + 218] = b[i];
 				}
 				RecursivePruningJob recursivePruningJob = new RecursivePruningJob(boardState, clist, shadowChessStackMoves, reached, cache, alpha, beta, maxDepthRemains, blackToMove);
 				Thread thread = new Thread(recursivePruningJob.Run);
@@ -397,7 +423,8 @@ namespace DotChess2
 
 			Span<Move> moves = stackalloc Move[shadowChessStackMoves];
 			//Killer heuristic
-			for(int i = 0; i < shadowChessStackMoves; ++i){
+			for (int i = 0; i < shadowChessStackMoves; ++i)
+			{
 				moves[i] = new Move(a[i], b[i]);
 			}
 			uint eightIfBlack = blackToMove ? 8u : 0u;
@@ -406,19 +433,24 @@ namespace DotChess2
 			if (shadowChessStackMoves > 1) moves.Sort(new EphemeralKillerSorter(boardState, cache, maxDepthRemains, FindKingUnsafe(boardStateNoEnPassant, eightIfBlack ^ 15), eightIfBlack));
 			uint expectedKing = eightIfBlack | 7;
 
-			
-			for(ulong kindex = 0; true;++kindex){
-				if(boardStateNoEnPassant.ReadRawUnsafe(kindex) == expectedKing){
+
+			for (ulong kindex = 0; true; ++kindex)
+			{
+				if (boardStateNoEnPassant.ReadRawUnsafe(kindex) == expectedKing)
+				{
 					int iki = (int)kindex;
-					if(Walker.ChkLegalKingPositionUnsafe(boardStateNoEnPassant, new Coordinate(iki & 7, iki >>> 3),(expectedKing & 8) ^ 8)){
+					if (Walker.ChkLegalKingPositionUnsafe(boardStateNoEnPassant, new Coordinate(iki & 7, iki >>> 3), (expectedKing & 8) ^ 8))
+					{
 						break;
-					} else{
+					}
+					else
+					{
 						goto nodeduct;
 
 					}
 				}
 			}
-			
+
 			--maxDepthRemains;
 		nodeduct:;
 			if (blackToMove)
@@ -454,7 +486,7 @@ namespace DotChess2
 							alpha,
 							beta,
 							maxDepthRemains,
-							false,ndepth);
+							false, ndepth);
 
 					if (score < best)
 					{
@@ -507,7 +539,7 @@ namespace DotChess2
 							alpha,
 							beta,
 							maxDepthRemains,
-							true,ndepth);
+							true, ndepth);
 
 					if (score > best)
 					{
