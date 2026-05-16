@@ -51,8 +51,9 @@ namespace DotChess2
 					if (permittedMoves[i] == tm) return tm;
 				}
 			}
+			
 			var nbs = boardState.boardStateNoEnPassant;
-
+			if (Walker.CheckInsufMaterialDrawFastUnsafe(nbs)) return permittedMoves[RandomNumberGenerator.GetInt32(0, lim)];
 			Span<Coordinate> cs = stackalloc Coordinate[436];
 			Span<Coordinate> a = cs.Slice(0, 218);
 			Span<Coordinate> b = cs.Slice(218, 218);
@@ -132,11 +133,7 @@ namespace DotChess2
 			}
 			bool iterative_deepening = (wp < 3) | (bp < 3);
 			
-			if(iterative_deepening){
-				if(Walker.CheckInsufMaterialDrawFastUnsafe_USCF(nbs)){
-					iterative_deepening = false;
-				}
-			}
+
 			
 		restart_search:
 			int alpha = -65536;
@@ -237,7 +234,7 @@ namespace DotChess2
 
 			if (maxDepthRemains == 0)
 			{
-				Conclusion conclusion = Walker.GetConclusionFastUnsafe_USCFDraw(boardState, blackToMove);
+				Conclusion conclusion = Walker.GetConclusionFastUnsafe(boardState, blackToMove);
 				if (conclusion == Conclusion.CHECKMATE) return blackToMove ? 65536 : -65536;
 				if (conclusion != Conclusion.NORMAL) return 0;
 				return GetHeuristicAdvantage(boardState.boardStateNoEnPassant);
@@ -269,7 +266,7 @@ namespace DotChess2
 			int multiply;
 			if (CheckUnlimitedDepthEligible(nbs))
 			{
-				if (Walker.CheckInsufMaterialDrawFastUnsafe_USCF(nbs)) return 0;
+				if (Walker.CheckInsufMaterialDrawFastUnsafe(nbs)) return 0;
 				//UNLIMITED depth regime
 				maxDepthRemains = int.MaxValue;
 			}
