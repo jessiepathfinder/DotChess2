@@ -1,9 +1,11 @@
-﻿using System;
+﻿using Microsoft.Win32.SafeHandles;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Dynamic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -43,26 +45,7 @@ namespace DotChess2
 			}
 		}
 
-		private readonly struct EphemeralKillerSorterOld : IComparer<Move>
-		{
-			private readonly BoardState boardState;
-			private readonly Coordinate enemyKingCoord;
-			private readonly uint eightIfBlack;
 
-
-			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public EphemeralKillerSorterOld(BoardState boardState, Coordinate enemyKingCoord, uint eightIfBlack)
-			{
-				this.boardState = boardState;
-				this.enemyKingCoord = enemyKingCoord;
-				this.eightIfBlack = eightIfBlack;
-			}
-			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public int Compare(Move x, Move y)
-			{
-				return Walker.GetKillerMoveScoreUnsafe2(boardState, y, enemyKingCoord, eightIfBlack).CompareTo(Walker.GetKillerMoveScoreUnsafe2(boardState, x, enemyKingCoord, eightIfBlack));
-			}
-		}
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public Move ComputeMove(BoardState boardState, ReadOnlySpan<Move> permittedMoves, bool blackToMove)
 		{
@@ -113,8 +96,23 @@ namespace DotChess2
 			permittedMoves.CopyTo(pm1);
 
 			uint eightIfBlack = blackToMove ? 8u : 0u;
+			//NOTE: DON'T deduct from max depth remains if king is in check
+			BoardStateNoEnPassant boardStateNoEnPassant = boardState.boardStateNoEnPassant;
+			Coordinate kingcoord = FindKingUnsafe(boardStateNoEnPassant, eightIfBlack ^ 15);
+			
+			if (lim > 1)
+			{
+				Span<uint> sortkeys = stackalloc uint[lim];
+				for(int i = 0; i < lim; ++i){
+					Move move = new Move(a[i], b[i]);
+					pm1[i] = move;
+					BoardState boardState1 = Walker.ApplyMoveUnsafe(boardState, move);
+					sortkeys[i] = uint.MaxValue - Walker.GetKillerMoveScoreUnsafe2(boardState, boardState1.boardStateNoEnPassant, move, kingcoord, eightIfBlack);
+				}
+				sortkeys.Sort(pm1);
+			}
 
-			pm1.Sort(new EphemeralKillerSorterOld(boardState, FindKingUnsafe(nbs, 15 ^ eightIfBlack), eightIfBlack));
+
 			int depth;
 			if (Walker.ChkLegalKingPositionUnsafe(nbs, FindKingUnsafe(nbs, 15 | eightIfBlack), eightIfBlack ^ 8))
 			{
@@ -307,66 +305,7 @@ namespace DotChess2
 			return true;
 		}
 
-		private readonly struct EphemeralKillerSorter : IComparer<Move>
-		{
-			private readonly BoardState boardState;
-
-
-			private readonly
-			Dictionary<
-				BoardStateNoEnPassant,
-				(int score, int depth)>
-			cache;
-
-			private readonly int maxDepthRemains;
-			private readonly Coordinate enemyKingCoord;
-			private readonly uint eightIfBlack;
-
-			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public EphemeralKillerSorter(
-				BoardState boardState,
-				Dictionary<
-					BoardStateNoEnPassant,
-					(int score, int depth)>
-				cache,
-				int maxDepthRemains, Coordinate enemyKingCoord, uint eightIfBlack)
-			{
-				this.boardState = boardState;
-				this.cache = cache;
-				this.maxDepthRemains =
-					maxDepthRemains;
-				this.enemyKingCoord = enemyKingCoord;
-				this.eightIfBlack = eightIfBlack;
-			}
-
-			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			private uint GetCacheAwareKillerScoreUnsafe(
-				Move move)
-			{
-				// =====================================
-				// Cache hit bonus
-				// =====================================
-
-				if (cache.TryGetValue(Walker.GetIdentity(Walker.ApplyMoveUnsafe(boardState, move)).Item1, out var result))
-				{
-
-					if (
-						(result.depth >=
-						maxDepthRemains) | (result.score == 65536) | (result.score == -65536))
-					{
-						return int.MaxValue;
-					}
-				}
-
-				return Walker.GetKillerMoveScoreUnsafe2(boardState, move, enemyKingCoord, eightIfBlack);
-			}
-
-			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public int Compare(Move x, Move y)
-			{
-				return GetCacheAwareKillerScoreUnsafe(y).CompareTo(GetCacheAwareKillerScoreUnsafe(x));
-			}
-		}
+		
 
 		private sealed class RecursivePruningJob
 		{
@@ -423,14 +362,42 @@ namespace DotChess2
 
 			Span<Move> moves = stackalloc Move[shadowChessStackMoves];
 			//Killer heuristic
-			for (int i = 0; i < shadowChessStackMoves; ++i)
-			{
-				moves[i] = new Move(a[i], b[i]);
-			}
+			
 			uint eightIfBlack = blackToMove ? 8u : 0u;
 			//NOTE: DON'T deduct from max depth remains if king is in check
 			BoardStateNoEnPassant boardStateNoEnPassant = boardState.boardStateNoEnPassant;
-			if (shadowChessStackMoves > 1) moves.Sort(new EphemeralKillerSorter(boardState, cache, maxDepthRemains, FindKingUnsafe(boardStateNoEnPassant, eightIfBlack ^ 15), eightIfBlack));
+			Coordinate kingcoord = FindKingUnsafe(boardStateNoEnPassant, eightIfBlack ^ 15);
+			Span<uint> sortkeys = stackalloc uint[shadowChessStackMoves];
+			int walk1;
+			if (shadowChessStackMoves > 1){
+				
+				walk1 = 0;
+				int walk2 = 0;
+				for(int i = 0; i < shadowChessStackMoves; ++i){
+					ref Move ma = ref moves[i];
+					Move move = new Move(a[i],b[i]);
+					BoardState boardState1 = Walker.ApplyMoveUnsafe(boardState, move);
+					if(cache.TryGetValue(Walker.GetIdentity(boardState1).Item1, out var x)){
+						if(x.depth >= maxDepthRemains){
+							
+							ref Move mb = ref moves[walk1++];
+							ma = mb;
+							mb = move;
+							continue;
+						}
+					}
+					ma = move;
+					sortkeys[walk2++] = uint.MaxValue - Walker.GetKillerMoveScoreUnsafe2(boardState, boardState1.boardStateNoEnPassant,move,kingcoord,eightIfBlack);
+				}
+				if(walk2 < 2){
+					walk1 = int.MaxValue;
+				}
+
+			} else{
+				moves[0] = new Move(a[0], b[0]);
+				walk1 = int.MaxValue;
+			}
+			
 			uint expectedKing = eightIfBlack | 7;
 
 
@@ -459,6 +426,11 @@ namespace DotChess2
 
 				for (int i = 0; i < shadowChessStackMoves; ++i)
 				{
+					
+					if(i == walk1){
+						int walk2 = shadowChessStackMoves - walk1;
+						sortkeys.Slice(0, walk2).Sort(moves.Slice(walk1));
+					}
 					Move move = moves[i];
 
 					BoardState child =
@@ -512,6 +484,10 @@ namespace DotChess2
 
 				for (int i = 0; i < shadowChessStackMoves; ++i)
 				{
+					if (i == walk1)
+					{
+						sortkeys.Slice(0, shadowChessStackMoves - walk1).Sort(moves.Slice(walk1));
+					}
 					Move move = moves[i];
 
 					BoardState child =
