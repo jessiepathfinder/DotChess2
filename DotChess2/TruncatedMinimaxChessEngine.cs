@@ -173,7 +173,7 @@ namespace DotChess2
 				if (score == 65537) return move;
 
 			}
-			if(iterative_deepening && (cache.Count < 30000000)){
+			if(iterative_deepening && (cache.Count < 50000000)){
 				++depth;
 
 				//FILTER cache: DELETE ALL indeterminate entries
