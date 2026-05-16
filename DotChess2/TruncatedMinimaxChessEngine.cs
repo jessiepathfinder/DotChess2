@@ -1,14 +1,7 @@
-﻿using Microsoft.Win32.SafeHandles;
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Dynamic;
-using System.Linq;
+﻿
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
-using System.Text;
-using System.Threading.Tasks;
+
 
 namespace DotChess2
 {
@@ -50,7 +43,15 @@ namespace DotChess2
 		public Move ComputeMove(BoardState boardState, ReadOnlySpan<Move> permittedMoves, bool blackToMove)
 		{
 			int lim = permittedMoves.Length;
+			//queen's gambit opening
 			if (lim == 1) return permittedMoves[0];
+			if(boardState.boardStateNoEnPassant == BoardStateNoEnPassant.Initial()){
+				Move tm = new Move(new Coordinate(3,1), new Coordinate(3,3));
+				for(int i = 0; i < lim; ++i){
+					if (permittedMoves[i] == tm) return tm;
+				}
+			}
+			var nbs = boardState.boardStateNoEnPassant;
 
 			Span<Coordinate> cs = stackalloc Coordinate[436];
 			Span<Coordinate> a = cs.Slice(0, 218);
@@ -59,7 +60,7 @@ namespace DotChess2
 			uint pa = boardState.enPassantOffset;
 
 
-			var nbs = boardState.boardStateNoEnPassant;
+			
 			if (pa == 0)
 			{
 				identity = Walker.GetIdentity(nbs).identity;
@@ -97,20 +98,16 @@ namespace DotChess2
 
 			uint eightIfBlack = blackToMove ? 8u : 0u;
 			//NOTE: DON'T deduct from max depth remains if king is in check
-			BoardStateNoEnPassant boardStateNoEnPassant = boardState.boardStateNoEnPassant;
-			Coordinate kingcoord = FindKingUnsafe(boardStateNoEnPassant, eightIfBlack ^ 15);
-			
-			if (lim > 1)
+			Coordinate kingcoord = FindKingUnsafe(nbs, eightIfBlack ^ 15);
+			Span<uint> sortkeys = stackalloc uint[lim];
+			for (int i = 0; i < lim; ++i)
 			{
-				Span<uint> sortkeys = stackalloc uint[lim];
-				for(int i = 0; i < lim; ++i){
-					Move move = new Move(a[i], b[i]);
-					pm1[i] = move;
-					BoardState boardState1 = Walker.ApplyMoveUnsafe(boardState, move);
-					sortkeys[i] = uint.MaxValue - Walker.GetKillerMoveScoreUnsafe2(boardState, boardState1.boardStateNoEnPassant, move, kingcoord, eightIfBlack);
-				}
-				sortkeys.Sort(pm1);
+				Move move = new Move(a[i], b[i]);
+				pm1[i] = move;
+				BoardState boardState1 = Walker.ApplyMoveUnsafe(boardState, move);
+				sortkeys[i] = 256 - Walker.GetKillerMoveScoreUnsafe2(boardState, boardState1.boardStateNoEnPassant, move, kingcoord, eightIfBlack);
 			}
+			sortkeys.Sort(pm1);
 
 
 			int depth;
@@ -124,14 +121,29 @@ namespace DotChess2
 			}
 			Span<Move> candid = stackalloc Move[lim];
 
-
-
+			uint wp = 0;
+			uint bp = 0;
+			for(ulong i = 0; i < 64; ++i){
+				uint piec = nbs.ReadRawUnsafe(i);
+				if (piec == 0) continue;
+				uint incr = (piec & 8) >> 3;
+				bp += incr;
+				wp += 1 ^ incr;
+			}
+			bool iterative_deepening = (wp < 3) | (bp < 3);
+			
+			if(iterative_deepening){
+				if(Walker.CheckInsufMaterialDrawFastUnsafe_USCF(nbs)){
+					iterative_deepening = false;
+				}
+			}
+			
+		restart_search:
 			int alpha = -65536;
 			int beta = 65536;
 			for (int i = 0; i < lim; ++i)
 			{
 				Move move = permittedMoves[i];
-
 				int score = AlphaBetaPruning(Walker.ApplyMoveUnsafe(boardState, move), a, b, s, cache, alpha, beta, depth, nbpm, 0);
 				if (blackToMove)
 				{
@@ -149,6 +161,7 @@ namespace DotChess2
 				}
 
 				score *= multi;
+				score += (int)(sortkeys[i] & 1u);
 
 				if (score > bestScore)
 				{
@@ -160,9 +173,24 @@ namespace DotChess2
 				{
 					candid[ndraw++] = move;
 				}
-				if (score == 65536) break;
+				if (score == 65537) return move;
 
 			}
+			if(iterative_deepening){
+				++depth;
+
+				//FILTER cache: DELETE ALL indeterminate entries
+				Dictionary<BoardStateNoEnPassant, (int, int)> newcache = new();
+				foreach(KeyValuePair< BoardStateNoEnPassant, (int, int)> kvp in cache){
+					(int score, int depth1) = kvp.Value;
+					if(depth1 == int.MaxValue){
+						newcache.Add(kvp.Key, (score, int.MaxValue));
+					}
+				}
+				cache = newcache;
+				goto restart_search;
+			}
+		
 			if (ndraw == 0) return permittedMoves[RandomNumberGenerator.GetInt32(0, lim)];
 			if (ndraw == 1) return candid[0];
 			return candid[RandomNumberGenerator.GetInt32(0, ndraw)];
@@ -291,16 +319,14 @@ namespace DotChess2
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool CheckUnlimitedDepthEligible(BoardStateNoEnPassant boardStateNoEnPassant)
 		{
-			ulong whitePieces = 0;
-			ulong blackPieces = 0;
+			int tp = 0;
 			for (ulong i = 0; i < 64; ++i)
 			{
 				ulong x = boardStateNoEnPassant.ReadRawUnsafe(i);
 				if (x == 0) continue;
-				ulong bp = x >> 3;
-				blackPieces += bp;
-				whitePieces += 1 - bp;
-				if ((blackPieces > 3) & (whitePieces > 3)) return false;
+				
+				if (tp > 3) return false;
+				++tp;
 			}
 			return true;
 		}
@@ -399,7 +425,6 @@ namespace DotChess2
 			}
 			
 			uint expectedKing = eightIfBlack | 7;
-
 
 			for (ulong kindex = 0; true; ++kindex)
 			{
@@ -515,7 +540,8 @@ namespace DotChess2
 							alpha,
 							beta,
 							maxDepthRemains,
-							true, ndepth);
+							true,
+							ndepth);
 
 					if (score > best)
 					{

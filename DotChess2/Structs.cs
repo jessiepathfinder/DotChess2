@@ -315,8 +315,18 @@ namespace DotChess2
 		{
 			return new Coordinate(x+dx, y + dy);
 		}
+
+		public static bool operator ==(Coordinate left, Coordinate right)
+		{
+			return left.Equals(right);
+		}
+
+		public static bool operator !=(Coordinate left, Coordinate right)
+		{
+			return !(left == right);
+		}
 	}
-	public readonly struct Move 
+	public readonly struct Move : IEquatable<Move>
 	{
 		public readonly Coordinate source;
 		public readonly Coordinate destination;
@@ -330,6 +340,29 @@ namespace DotChess2
 		public override int GetHashCode()
 		{
 			return (source.x | (source.y << 3) | (destination.x << 6) | (destination.y << 9)).GetHashCode();
+		}
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public override bool Equals(object? obj)
+		{
+			if(obj is Move move){
+				return (source == move.source) & (destination == move.destination);
+			}
+			return false;
+		}
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public bool Equals(Move other)
+		{
+			return (source == other.source) & (destination == other.destination);
+		}
+
+		public static bool operator ==(Move left, Move right)
+		{
+			return left.Equals(right);
+		}
+
+		public static bool operator !=(Move left, Move right)
+		{
+			return !(left == right);
 		}
 	}
 

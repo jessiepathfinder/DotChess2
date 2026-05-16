@@ -1104,118 +1104,7 @@ namespace DotChess2
 	BoardState boardState,
 	bool blackToMove)
 		{
-			// =========================================
-			// Fast insufficient material detection
-			// =========================================
-			//
-			// Draws detected:
-			//
-			// - K vs K
-			// - K+B vs K
-			// - K+N vs K
-			// - K+NN vs K
-			//
-			// Conservative:
-			//
-			// Does NOT detect:
-			// - same-color bishops
-			// - fortress draws
-			// - repetitions
-			// - 50 move rule
-			//
-			// =========================================
-
-			int whiteKnights = 0;
-			int blackKnights = 0;
-
-			int whiteBishops = 0;
-			int blackBishops = 0;
-
-			int whiteOther = 0;
-			int blackOther = 0;
-
-			for (ulong i = 0; i < 64; ++i)
-			{
-				uint p = boardState.ReadRawUnsafe(i);
-
-				uint type = p & 7;
-
-				if (type == 0 || type == 7)
-					continue;
-
-				bool black = (p & 8) != 0;
-
-				switch (type)
-				{
-					case 2:
-
-						if (black)
-							++blackKnights;
-						else
-							++whiteKnights;
-
-						break;
-
-					case 3:
-
-						if (black)
-							++blackBishops;
-						else
-							++whiteBishops;
-
-						break;
-
-					default:
-
-						if (black)
-							++blackOther;
-						else
-							++whiteOther;
-
-						break;
-				}
-			}
-
-			// Any pawn/rook/queen/etc means sufficient
-			if ((whiteOther | blackOther) == 0)
-			{
-				int whiteMinors =
-					whiteKnights + whiteBishops;
-
-				int blackMinors =
-					blackKnights + blackBishops;
-
-				// K vs K
-				if ((whiteMinors | blackMinors) == 0)
-				{
-					return Conclusion.TOO_WEAK;
-				}
-
-				// K+minor vs K
-				if (
-					(whiteMinors == 1 & blackMinors == 0) |
-					(whiteMinors == 0 & blackMinors == 1))
-				{
-					return Conclusion.TOO_WEAK;
-				}
-
-				// K+NN vs K
-				if (
-					whiteKnights == 2 &
-					whiteBishops == 0 &
-					blackMinors == 0)
-				{
-					return Conclusion.TOO_WEAK;
-				}
-
-				if (
-					blackKnights == 2 &
-					blackBishops == 0 &
-					whiteMinors == 0)
-				{
-					return Conclusion.TOO_WEAK;
-				}
-			}
+			
 
 			// =========================================
 			// Find side-to-move king
@@ -1245,6 +1134,7 @@ namespace DotChess2
 				boardState,
 				blackToMove))
 			{
+				if (CheckInsufMaterialDrawFastUnsafe_USCF(boardState.boardStateNoEnPassant)) return Conclusion.TOO_WEAK;
 				return Conclusion.NORMAL;
 			}
 
@@ -1375,9 +1265,7 @@ namespace DotChess2
 			// USCF-style insufficient material
 			// =========================================
 			//
-			// Same as strict version PLUS:
-			//
-			// - K+NN vs K
+			// Same as strict version PLUS USCF draws
 			//
 			// treated as automatic draw.
 			//
@@ -1388,6 +1276,8 @@ namespace DotChess2
 
 			int whiteBishops = 0;
 			int blackBishops = 0;
+			int whiteRooks = 0;
+			int blackRooks = 0;
 
 			for (ulong i = 0; i < 64; ++i)
 			{
@@ -1419,6 +1309,15 @@ namespace DotChess2
 							++whiteBishops;
 
 						break;
+					case 4:
+					case 5:
+
+						if (black)
+							++blackRooks;
+						else
+							++whiteRooks;
+						if ((blackRooks + whiteRooks) == 2) return false;
+						break;
 
 					default:
 
@@ -1431,7 +1330,9 @@ namespace DotChess2
 
 			int blackMinors =
 				blackKnights + blackBishops;
-
+			if (blackMinors == 1 & whiteRooks == 1) return true;
+			if (whiteMinors == 1 & blackRooks == 1) return true;
+			if ((whiteRooks | blackRooks) == 1) return false;
 			// K vs K
 			if ((whiteMinors | blackMinors) == 0)
 				return true;
@@ -1460,8 +1361,19 @@ namespace DotChess2
 			{
 				return true;
 			}
+			if (
+				blackKnights == 2 &
+				blackBishops == 0 &
+				whiteMinors == 0)
+			{
+				return true;
+			}
+			if ((blackBishops == 1) & (whiteKnights == 1)) return true;
+			if ((whiteBishops == 1) & (blackKnights == 1)) return true;
+			
 
-			return false;
+
+			return (blackBishops == 1) & (whiteBishops == 1);
 		}
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private static int GetPawnTargets(Span<Coordinate> destinations,BoardState bs, Coordinate origin, GamePiece cached, uint u8ib)
