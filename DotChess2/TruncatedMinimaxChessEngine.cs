@@ -132,9 +132,9 @@ namespace DotChess2
 				wp += 1 ^ incr;
 			}
 			bool iterative_deepening = (wp < 4) | (bp < 4);
-			
 
-			
+
+			int pcs = 0;
 		restart_search:
 			int alpha = -65536;
 			int beta = 65536;
@@ -173,19 +173,26 @@ namespace DotChess2
 				if (score == 65537) return move;
 
 			}
-			if(iterative_deepening && (cache.Count < 30000000)){
-				++depth;
+			if(iterative_deepening){
+				int cachesize = cache.Count;
+				if(pcs < cachesize){
+					pcs = cachesize;
+					++depth;
 
-				//FILTER cache: DELETE ALL indeterminate entries
-				Dictionary<BoardStateNoEnPassant, (int, int)> newcache = new();
-				foreach(KeyValuePair< BoardStateNoEnPassant, (int, int)> kvp in cache){
-					(int score, int depth1) = kvp.Value;
-					if(depth1 == int.MaxValue){
-						newcache.Add(kvp.Key, (score, int.MaxValue));
+					//FILTER cache: DELETE ALL indeterminate entries
+					Dictionary<BoardStateNoEnPassant, (int, int)> newcache = new();
+					foreach (KeyValuePair<BoardStateNoEnPassant, (int, int)> kvp in cache)
+					{
+						(int score, int depth1) = kvp.Value;
+						if (depth1 == int.MaxValue)
+						{
+							newcache.Add(kvp.Key, (score, int.MaxValue));
+						}
 					}
+					cache = newcache;
+					goto restart_search;
 				}
-				cache = newcache;
-				goto restart_search;
+
 			}
 		
 			if (ndraw == 0) return permittedMoves[RandomNumberGenerator.GetInt32(0, lim)];
