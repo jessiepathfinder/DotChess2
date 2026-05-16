@@ -131,7 +131,7 @@ namespace DotChess2
 				bp += incr;
 				wp += 1 ^ incr;
 			}
-			bool iterative_deepening = (wp < 3) | (bp < 3);
+			bool iterative_deepening = (wp < 4) | (bp < 4);
 			
 
 			
@@ -173,7 +173,7 @@ namespace DotChess2
 				if (score == 65537) return move;
 
 			}
-			if(iterative_deepening & (depth < 20)){
+			if(iterative_deepening && (cache.Count < 30000000)){
 				++depth;
 
 				//FILTER cache: DELETE ALL indeterminate entries
