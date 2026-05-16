@@ -179,10 +179,9 @@ namespace DotChess2
 						score1 = 0x5ce2292f5281539eu;
 					} else{
 						score1 = (ulong)(score + 94);
-						score1 |= score1 << 7;
-						score1 |= score1 << 14;
-						score1 |= score1 << 28;
-						score1 |= score1 << 56;
+						score1 |= score1 << 8;
+						score1 |= score1 << 16;
+						score1 |= score1 << 32;
 					}
 					searchHash += score1;
 					searchHash ^= searchHash << 13;
