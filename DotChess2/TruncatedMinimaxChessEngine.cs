@@ -133,12 +133,9 @@ namespace DotChess2
 			}
 			bool iterative_deepening = (wp < 4) | (bp < 4);
 
-			ulong prevSearchHash = 0;
 		restart_search:
 			int alpha = -65536;
 			int beta = 65536;
-			//CREDIT: random.org
-			ulong searchHash = 0x62bb204179699ac8u;
 			for (int i = 0; i < lim; ++i)
 			{
 				Move move = permittedMoves[i];
@@ -172,29 +169,9 @@ namespace DotChess2
 					candid[ndraw++] = move;
 				}
 				if (score == 65537) return move;
-				if(iterative_deepening){
-					ulong score1;
-					if(score == -65536){
-						//CREDIT: random.org
-						score1 = 0x5ce2292f5281539eu;
-					} else{
-						score1 = (ulong)(score + 94);
-						score1 |= score1 << 8;
-						score1 |= score1 << 16;
-						score1 |= score1 << 32;
-					}
-					searchHash += score1;
-					searchHash ^= searchHash << 13;
-					searchHash ^= searchHash >> 7;
-					searchHash ^= searchHash << 17;
 
-				}
 			}
-			if(iterative_deepening){
-				if(prevSearchHash > 0 & prevSearchHash != searchHash){
-					goto noidp;
-				}
-				prevSearchHash = searchHash;
+			if(iterative_deepening & (depth < 20)){
 				++depth;
 
 				//FILTER cache: DELETE ALL indeterminate entries
@@ -210,7 +187,6 @@ namespace DotChess2
 				cache = newcache;
 				goto restart_search;
 			}
-		noidp:
 			if (ndraw == 0) return permittedMoves[RandomNumberGenerator.GetInt32(0, lim)];
 			if (ndraw == 1) return candid[0];
 			return candid[RandomNumberGenerator.GetInt32(0, ndraw)];
