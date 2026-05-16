@@ -2322,11 +2322,13 @@ GetIdentityAssumeNoEP(BoardStateNoEnPassant bullshit)
 		public static uint GetKillerMoveScoreUnsafe2(
 		BoardState bs, BoardStateNoEnPassant target,
 		Move move, Coordinate ememyKingCoordinate, uint eightIfBlack){
-			uint score = GetKillerMoveScoreUnsafe(bs,move) << 2;
+			uint score = GetKillerMoveScoreUnsafe(bs,move) << 5;
+			Coordinate tgt = GetEffectiveCaptureTarget(bs, move, (GamePiece)bs.GetUnsafe(move.source));
+			score += (uint)(((move.source.x - tgt.x) & 7) + ((move.source.y - tgt.y) & 7));
 			if(ChkLegalKingPositionUnsafe(target, ememyKingCoordinate, eightIfBlack)){
 				return score;
 			}
-			return score | 1;
+			return score | 16;
 
 
 		}
