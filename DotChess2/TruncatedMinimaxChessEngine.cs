@@ -175,6 +175,8 @@ namespace DotChess2
 			}
 			if(iterative_deepening){
 				int cachesize = cache.Count;
+				//HACK: Cache size expansion means we are still discovering new states
+				//(and still have hope of avoiding lose/draw)
 				if(pcs < cachesize){
 					pcs = cachesize;
 					++depth;
