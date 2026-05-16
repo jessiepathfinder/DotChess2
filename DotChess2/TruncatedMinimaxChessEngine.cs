@@ -239,7 +239,7 @@ namespace DotChess2
 		{
 			return AlphaBetaPruningImpl(boardState, a, b, reached, cache, alpha, beta, maxDepthRemains, false, ndepth);
 		}
-
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static int GetHeuristicAdvantage(BoardStateNoEnPassant boardState)
 		{
 			int adv = 0;
@@ -250,6 +250,33 @@ namespace DotChess2
 			}
 			return adv;
 		}
+		private static IEnumerable<BoardStateNoEnPassant> ExpandPretendQueenCompat(IEnumerable<BoardStateNoEnPassant> bsnep, ulong coord, ulong eightifblack){
+			int ic = (int)coord;
+			ulong cr = 0;
+			if(coord == 0 | coord == 7){
+				cr = 5;
+			}
+			if (coord == 56 | coord == 63)
+			{
+				cr = 13;
+			}
+			bool hascr = cr > 0;
+			ulong pawn = 1u | eightifblack;
+			ulong bishop = 3u | eightifblack;
+			ulong rook = 4u | eightifblack;
+			foreach (var x in bsnep){
+				var y = x.DeleteUnsafe(ic);
+				//Pawn
+				yield return y.WriteRawUnsafe(coord,pawn);
+				//Bishop
+				yield return y.WriteRawUnsafe(coord,rook);
+				//Rook
+				yield return y.WriteRawUnsafe(coord,bishop);
+				//Castleable rook
+				if(hascr) yield return y.WriteRawUnsafe(coord, cr);
+			}
+		}
+
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private static int AlphaBetaPruningImpl(BoardState boardState, Span<Coordinate> a, Span<Coordinate> b, HashSet<BoardStateNoEnPassant> reached, Dictionary<BoardStateNoEnPassant, (int score, int depth)> cache, int alpha, int beta, int maxDepthRemains, bool blackToMove, uint ndepth)
@@ -293,9 +320,10 @@ namespace DotChess2
 				//UNLIMITED depth regime
 				maxDepthRemains = int.MaxValue;
 			}
-			uint pa = boardState.enPassantOffset;
-
-			if (pa == 0)
+			byte bpa = boardState.enPassantOffset;
+			uint pa = bpa;
+			bool npa = pa == 0;
+			if (npa)
 			{
 				(identity, multiply) = Walker.GetIdentityAssumeNoEP(nbs);
 			}
@@ -314,6 +342,7 @@ namespace DotChess2
 						}
 					}
 				}
+				npa = false;
 				(identity, multiply) = Walker.GetIdentityAssumeNoEP(nbs);
 			}
 		nopi:
@@ -327,6 +356,38 @@ namespace DotChess2
 				return result.score * multiply;
 			}
 		nores:;
+			IEnumerable<BoardStateNoEnPassant>? bsnep = null;
+			ulong eightIfBlack = blackToMove ? 8u : 0u;
+			ulong expectedQueen = 6 | eightIfBlack;
+			for(ulong i = 0; i < 64; ++i){
+				if(nbs.ReadRawUnsafe(i) == expectedQueen){
+					if (bsnep is null){
+						bsnep = new BoardStateNoEnPassant[] { nbs };
+					}
+					bsnep = ExpandPretendQueenCompat(bsnep, i, eightIfBlack);
+				}
+			}
+			if(bsnep is { }){
+				int winScore = blackToMove ? -65536 : 65536;
+				if(npa){
+					foreach (var x in bsnep)
+					{
+						(var iden, int flip) = Walker.GetIdentityAssumeNoEP(new BoardState(x, bpa).ToCompressedEPFormUnsafe());
+						if(cache.TryGetValue(iden, out var extract)){
+							if ((extract.score * flip) == winScore) return winScore;
+						}
+					}
+				} else{
+					foreach (var x in bsnep)
+					{
+						(var iden, int flip) = Walker.GetIdentityAssumePawn(new BoardState(x, bpa).ToCompressedEPFormUnsafe());
+						if (cache.TryGetValue(iden, out var extract))
+						{
+							if ((extract.score * flip) == winScore) return winScore;
+						}
+					}
+				}
+			}
 			reached.Add(identity);
 			int res = AlphaBetaPruningImpl3(boardState, a, b, delta, reached, cache, alpha, beta, maxDepthRemains, blackToMove, ndepth);
 			reached.Remove(identity);
