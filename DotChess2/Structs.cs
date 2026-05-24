@@ -315,7 +315,6 @@ namespace DotChess2
 		{
 			return new Coordinate(x+dx, y + dy);
 		}
-
 		public static bool operator ==(Coordinate left, Coordinate right)
 		{
 			return left.Equals(right);

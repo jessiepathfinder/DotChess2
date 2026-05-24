@@ -8,7 +8,7 @@ namespace DotChess2.PVC
 		// Placeholder engine
 		// Replace with actual implementation later
 		private static readonly TruncatedMinimaxChessEngine? engine = new TruncatedMinimaxChessEngine();
-		private static void Main1()
+		private static void Main()
 		{
 			Console.CursorVisible = false;
 
@@ -39,25 +39,13 @@ namespace DotChess2.PVC
 				Console.WriteLine(
 					"Press ESC to quit.");
 
-				ConsoleKeyInfo key =
-					Console.ReadKey(true);
-
-				if (key.Key == ConsoleKey.Escape)
-				{
-					return;
-				}
-
-				if (key.Key != ConsoleKey.Enter)
-				{
-					continue;
-				}
 
 				Conclusion conclusion =
 					renderer.GetConclusion();
 
 				if (conclusion != Conclusion.NORMAL)
 				{
-					continue;
+					break;
 				}
 
 				bool blackToMove =
@@ -107,8 +95,9 @@ namespace DotChess2.PVC
 
 				renderer.InvertTurn();
 			}
+			Console.ReadLine();
 		}
-		public static void Main()
+		public static void Main1()
 		{
 			Console.CursorVisible = false;
 

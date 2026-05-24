@@ -998,56 +998,9 @@ namespace DotChess2
 	BoardState boardState,
 	bool blackToMove)
 		{
-			// =========================================
-			// Insufficient material detection
-			// =========================================
-			//
-			// Supported:
-			// - K vs K
-			// - K+B vs K
-			// - K+N vs K
-			//
-			// Intentionally does NOT detect:
-			// - K+B vs K+B same color
-			// - fortress draws
-			// - repetition
-			// - 50 move rule
-			//
-			// Fast conservative detector.
-			// =========================================
+			if(CheckInsufMaterialDrawFastUnsafe(boardState.boardStateNoEnPassant))
+				return Conclusion.TOO_WEAK;
 
-			bool foundMinor = false;
-
-			for (ulong i = 0; i < 64; ++i)
-			{
-				uint p =
-					boardState.ReadRawUnsafe(i);
-
-				switch (p & 7)
-				{
-					case 0:
-					case 7:
-						break;
-
-					case 3:
-					case 2:
-
-						if (foundMinor)
-						{
-							goto material_sufficient;
-						}
-						foundMinor = true;
-
-						break;
-
-					default:
-						goto material_sufficient;
-				}
-			}
-
-			return Conclusion.TOO_WEAK;
-
-		material_sufficient:
 
 			// =========================================
 			// Find side-to-move king
@@ -1099,61 +1052,7 @@ namespace DotChess2
 				? Conclusion.CHECKMATE
 				: Conclusion.STALEMATE;
 		}
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static Conclusion GetConclusionFastUnsafe_USCFDraw(
-	BoardState boardState,
-	bool blackToMove)
-		{
-			
 
-			// =========================================
-			// Find side-to-move king
-			// =========================================
-
-			uint king = 7u | (blackToMove ? 8u : 0u);
-
-			uint kingcoord = 0;
-
-			while (
-				boardState.ReadRawUnsafe(
-					kingcoord) != king)
-			{
-				++kingcoord;
-			}
-
-			Coordinate kingCoord =
-				new Coordinate(
-					(int)(kingcoord & 7),
-					(int)(kingcoord >> 3));
-
-			// =========================================
-			// Legal move existence
-			// =========================================
-
-			if (HasAnyLegalMoveUnsafe(
-				boardState,
-				blackToMove))
-			{
-				if (CheckInsufMaterialDrawFastUnsafe_USCF(boardState.boardStateNoEnPassant)) return Conclusion.TOO_WEAK;
-				return Conclusion.NORMAL;
-			}
-
-			// =========================================
-			// Checkmate / stalemate
-			// =========================================
-
-			bool inCheck =
-				!ChkLegalKingPositionUnsafe(
-					boardState.boardStateNoEnPassant,
-					kingCoord,
-					blackToMove
-						? 0u
-						: 8u);
-
-			return inCheck
-				? Conclusion.CHECKMATE
-				: Conclusion.STALEMATE;
-		}
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private static ObstructionType GetObstructionType(BoardStateNoEnPassant bs, Coordinate coordinate, ulong eightifblack)
 		{
@@ -1165,7 +1064,6 @@ namespace DotChess2
 			if (piece == 0) return ObstructionType.NO_OBSTRUCTION;
 			return ((piece & 8) == eightifblack) ? ObstructionType.FRIENDLY_OBSTRUCTION : ObstructionType.ENEMY_OBSTRUCTION;
 		}
-		[ChatGPTGenerated]
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool CheckInsufMaterialDrawFastUnsafe(
 	BoardStateNoEnPassant boardState)
@@ -1182,12 +1080,14 @@ namespace DotChess2
 			// - K vs K
 			// - K+B vs K
 			// - K+N vs K
+			// - K+B vs K+B (same-colored bishops)
 			//
 			// NOT draws:
 			//
 			// - K+NN vs K
 			// - K+BB vs K
 			// - K+BN vs K
+			// - opposite-colored bishops
 			//
 			// Conservative and fast.
 			// =========================================
@@ -1197,6 +1097,12 @@ namespace DotChess2
 
 			int whiteBishops = 0;
 			int blackBishops = 0;
+
+			// 0 = none
+			// 1 = dark square bishop
+			// 2 = light square bishop
+			uint whiteBishopColor = 0;
+			uint blackBishopColor = 0;
 
 			for (ulong i = 0; i < 64; ++i)
 			{
@@ -1222,10 +1128,42 @@ namespace DotChess2
 
 					case 3:
 
+						// Fast square-color detection:
+						//
+						// light if (x+y)&1 == 0
+						//
+						// Since:
+						// x = i & 7
+						// y = i >> 3
+						//
+						// parity becomes:
+						//
+						// ((i ^ (i >> 3)) & 1)
+						//
+						// But simpler:
+						//
+						// ((i + (i >> 3)) & 1)
+						//
+						// We encode:
+						//
+						// dark  = 1
+						// light = 2
+
+						uint color =
+							(((i + (i >> 3)) & 1) == 0)
+							? 2u
+							: 1u;
+
 						if (black)
+						{
 							++blackBishops;
+							blackBishopColor = color;
+						}
 						else
+						{
 							++whiteBishops;
+							whiteBishopColor = color;
+						}
 
 						break;
 
@@ -1242,138 +1180,40 @@ namespace DotChess2
 			int blackMinors =
 				blackKnights + blackBishops;
 
+			// =========================================
 			// K vs K
+			// =========================================
+
 			if ((whiteMinors | blackMinors) == 0)
 				return true;
 
+			// =========================================
 			// K+minor vs K
+			// =========================================
+
 			if (
 				(whiteMinors == 1 & blackMinors == 0) |
 				(whiteMinors == 0 & blackMinors == 1))
+			{
+				return true;
+			}
+
+			// =========================================
+			// K+B vs K+B
+			// Same-colored bishops only
+			// =========================================
+
+			if (
+				whiteKnights == 0 &
+				blackKnights == 0 &
+				whiteBishops == 1 &
+				blackBishops == 1 &
+				(whiteBishopColor == blackBishopColor))
 			{
 				return true;
 			}
 
 			return false;
-		}
-		[ChatGPTGenerated]
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static bool CheckInsufMaterialDrawFastUnsafe_USCF(
-			BoardStateNoEnPassant boardState)
-		{
-			// =========================================
-			// USCF-style insufficient material
-			// =========================================
-			//
-			// Same as strict version PLUS USCF draws
-			//
-			// treated as automatic draw.
-			//
-			// =========================================
-
-			int whiteKnights = 0;
-			int blackKnights = 0;
-
-			int whiteBishops = 0;
-			int blackBishops = 0;
-			int whiteRooks = 0;
-			int blackRooks = 0;
-
-			for (ulong i = 0; i < 64; ++i)
-			{
-				uint p = boardState.ReadRawUnsafe(i);
-
-				uint type = p & 7;
-
-				if (type == 0 | type == 7)
-					continue;
-
-				bool black = (p & 8) != 0;
-
-				switch (type)
-				{
-					case 2:
-
-						if (black)
-							++blackKnights;
-						else
-							++whiteKnights;
-
-						break;
-
-					case 3:
-
-						if (black)
-							++blackBishops;
-						else
-							++whiteBishops;
-
-						break;
-					case 4:
-					case 5:
-
-						if (black)
-							++blackRooks;
-						else
-							++whiteRooks;
-						if ((blackRooks + whiteRooks) == 2) return false;
-						break;
-
-					default:
-
-						return false;
-				}
-			}
-
-			int whiteMinors =
-				whiteKnights + whiteBishops;
-
-			int blackMinors =
-				blackKnights + blackBishops;
-			if (blackMinors == 1 & whiteRooks == 1) return true;
-			if (whiteMinors == 1 & blackRooks == 1) return true;
-			if ((whiteRooks | blackRooks) == 1) return false;
-			// K vs K
-			if ((whiteMinors | blackMinors) == 0)
-				return true;
-
-			// K+minor vs K
-			if (
-				(whiteMinors == 1 & blackMinors == 0) |
-				(whiteMinors == 0 & blackMinors == 1))
-			{
-				return true;
-			}
-
-			// K+NN vs K
-			if (
-				whiteKnights == 2 &
-				whiteBishops == 0 &
-				blackMinors == 0)
-			{
-				return true;
-			}
-
-			if (
-				blackKnights == 2 &
-				blackBishops == 0 &
-				whiteMinors == 0)
-			{
-				return true;
-			}
-			if (
-				blackKnights == 2 &
-				blackBishops == 0 &
-				whiteMinors == 0)
-			{
-				return true;
-			}
-			if ((blackBishops == 1) & (whiteKnights == 1)) return true;
-			if ((whiteBishops == 1) & (blackKnights == 1)) return true;
-			
-
-
-			return (blackBishops == 1) & (whiteBishops == 1);
 		}
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private static int GetPawnTargets(Span<Coordinate> destinations,BoardState bs, Coordinate origin, GamePiece cached, uint u8ib)

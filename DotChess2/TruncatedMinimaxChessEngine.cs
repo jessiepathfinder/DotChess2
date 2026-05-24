@@ -290,12 +290,88 @@ namespace DotChess2
 			}
 			BoardStateNoEnPassant identity;
 			int multiply;
-			if (CheckUnlimitedDepthEligible(nbs))
+			uint pcb = 0;
+			uint pcw = 0;
+			uint tot = 0;
+			bool pcb1 = true;
+			bool pcw1 = true;
+			bool unlimited = true;
+			for (ulong i = 0; i < 64; ++i)
+			{
+				uint n = nbs.ReadRawUnsafe(i);
+				if (n == 0) continue;
+				n &= 8;
+				n >>= 3;
+				
+				if (tot > 3)
+				{
+					//Isolated against pollution
+					if(!(pcb1 | pcw1)){
+						unlimited = false;
+						break;
+					}
+					
+				}
+				pcb += n;
+				
+				pcw += 1 ^ n;
+				pcb1 &= pcb < 2;
+				pcw1 &= pcw < 2;
+				++tot;
+			}
+			if (tot == 2) return 0; //FAST PATH OUT
+			if (unlimited)
 			{
 				if (Walker.CheckInsufMaterialDrawFastUnsafe(nbs)) return 0;
+
 				//UNLIMITED depth regime
 				maxDepthRemains = int.MaxValue;
 			}
+
+			//REALISTIC EXPECTATION SETTING
+			
+			//NOTE: Mutually exclusive due to insufficient material draw check condition
+			if (pcb1)
+			{
+				bool al0 = alpha < 0;
+				bool bg0 = beta > 0;
+				
+				
+				if(al0 | bg0){
+					if(al0){
+						alpha = 0;
+					}
+
+					if(bg0){
+						beta = 0;
+					}
+					
+					//AVOID BRANCH PREDICTOR POLLUTION of this by nesting
+					if (alpha >= beta) return 0;
+				}
+				
+			} else if (pcw1 & (beta > 0))
+			{
+				bool ag0 = alpha > 0;
+				bool bl0 = beta < 0;
+				if (ag0 | bl0)
+				{
+					if (ag0)
+					{
+						alpha = 0;
+					}
+
+					if (bl0)
+					{
+						beta = 0;
+					}
+
+					//AVOID BRANCH PREDICTOR POLLUTION of this by nesting
+					if (alpha >= beta) return 0;
+				}
+			}
+
+
 			byte bpa = boardState.enPassantOffset;
 			uint pa = bpa;
 			bool npa = pa == 0;
@@ -373,20 +449,7 @@ namespace DotChess2
 		}
 
 
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static bool CheckUnlimitedDepthEligible(BoardStateNoEnPassant boardStateNoEnPassant)
-		{
-			int tp = 0;
-			for (ulong i = 0; i < 64; ++i)
-			{
-				ulong x = boardStateNoEnPassant.ReadRawUnsafe(i);
-				if (x == 0) continue;
-				
-				if (tp > 3) return false;
-				++tp;
-			}
-			return true;
-		}
+
 
 		
 
@@ -550,12 +613,13 @@ namespace DotChess2
 					if (score < beta)
 					{
 						beta = score;
+						if (beta <= alpha)
+						{
+							break;
+						}
 					}
 
-					if (beta <= alpha)
-					{
-						break;
-					}
+					
 				}
 
 				return best;
@@ -608,12 +672,13 @@ namespace DotChess2
 					if (score > alpha)
 					{
 						alpha = score;
+						if (beta <= alpha)
+						{
+							break;
+						}
 					}
 
-					if (beta <= alpha)
-					{
-						break;
-					}
+					
 				}
 
 				return best;
