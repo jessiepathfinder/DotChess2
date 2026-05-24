@@ -1,4 +1,5 @@
 ﻿
+using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 
@@ -534,11 +535,13 @@ namespace DotChess2
 				}
 				if(walk2 < 2){
 					walk1 = int.MaxValue;
+					goto nodeduct;
 				}
 
 			} else{
 				moves[0] = new Move(a[0], b[0]);
 				walk1 = int.MaxValue;
+				goto nodeduct;
 			}
 			
 			uint expectedKing = eightIfBlack | 7;
@@ -585,9 +588,17 @@ namespace DotChess2
 							child.boardStateNoEnPassant)
 						.identity;
 
-					if (reached.Contains(childIdentity))
-					{
-						continue;
+					bool dtz = (boardStateNoEnPassant.GetUnsafe(move.source) == 9) || (boardStateNoEnPassant.GetUnsafe(move.destination) != 0);
+
+					HashSet<BoardStateNoEnPassant> nd;
+					if(dtz){
+						nd = new();
+					} else{
+						if (reached.Contains(childIdentity))
+						{
+							continue;
+						}
+						nd = reached;
 					}
 
 					int score =
@@ -595,7 +606,7 @@ namespace DotChess2
 							child,
 							a,
 							b,
-							reached,
+							nd,
 							cache,
 							alpha,
 							beta,
@@ -643,9 +654,20 @@ namespace DotChess2
 							child.boardStateNoEnPassant)
 						.identity;
 
-					if (reached.Contains(childIdentity))
+					bool dtz = (boardStateNoEnPassant.GetUnsafe(move.source) == 1) || (boardStateNoEnPassant.GetUnsafe(move.destination) != 0);
+
+					HashSet<BoardStateNoEnPassant> nd;
+					if (dtz)
 					{
-						continue;
+						nd = new();
+					}
+					else
+					{
+						if (reached.Contains(childIdentity))
+						{
+							continue;
+						}
+						nd = reached;
 					}
 
 					int score =
@@ -653,7 +675,7 @@ namespace DotChess2
 							child,
 							a,
 							b,
-							reached,
+							nd,
 							cache,
 							alpha,
 							beta,
