@@ -295,7 +295,6 @@ namespace DotChess2
 			uint tot = 0;
 			bool pcb1 = true;
 			bool pcw1 = true;
-			bool unlimited = true;
 			for (ulong i = 0; i < 64; ++i)
 			{
 				uint n = nbs.ReadRawUnsafe(i);
@@ -306,11 +305,9 @@ namespace DotChess2
 				if (tot > 3)
 				{
 					//Isolated against pollution
-					if(!(pcb1 | pcw1)){
-						unlimited = false;
+					if (!(pcb1 | pcw1)){
 						break;
 					}
-					
 				}
 				pcb += n;
 				
@@ -320,7 +317,7 @@ namespace DotChess2
 				++tot;
 			}
 			if (tot == 2) return 0; //FAST PATH OUT
-			if (unlimited)
+			if (tot < 4)
 			{
 				if (Walker.CheckInsufMaterialDrawFastUnsafe(nbs)) return 0;
 
